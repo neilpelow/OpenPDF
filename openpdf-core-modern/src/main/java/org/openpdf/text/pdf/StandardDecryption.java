@@ -48,8 +48,7 @@
  */
 package org.openpdf.text.pdf;
 
-import org.openpdf.text.pdf.crypto.AESCipher;
-import org.openpdf.text.pdf.crypto.ARCFOUREncryption;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 
 public class StandardDecryption {
 
@@ -85,7 +84,9 @@ public class StandardDecryption {
     public byte[] update(byte[] b, int off, int len) {
         if (aes) {
             if (initiated) {
-                return cipher.update(b, off, len);
+                byte[] input = new byte[len];
+                System.arraycopy(b, off, input, 0, len);
+                return CryptoServiceProvider.get().decryptAES(input, key, iv);
             } else {
                 int left = Math.min(iv.length - ivptr, len);
                 System.arraycopy(b, off, iv, ivptr, left);
@@ -93,15 +94,17 @@ public class StandardDecryption {
                 len -= left;
                 ivptr += left;
                 if (ivptr == iv.length) {
-                    cipher = new AESCipher(false, key, iv);
                     initiated = true;
                     if (len > 0) {
-                        return cipher.update(b, off, len);
+                        byte[] input = new byte[len];
+                        System.arraycopy(b, off, input, 0, len);
+                        return CryptoServiceProvider.get().decryptAES(input, key, iv);
                     }
                 }
                 return null;
             }
         } else {
+            // ARCFOUR logic could be abstracted similarly if needed
             byte[] b2 = new byte[len];
             arcfour.encryptARCFOUR(b, off, len, b2, 0);
             return b2;

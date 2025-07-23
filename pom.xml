@@ -48,12 +48,14 @@
   <modules>
     <module>openpdf-core-legacy</module>
     <module>openpdf-core-modern</module>
+    <module>openpdf-fonts-extra</module>
+    <module>openpdf-html</module>
+    <module>openpdf-kotlin</module>
+    <module>openpdf-renderer</module>
     <module>pdf-swing</module>
     <module>pdf-toolbox</module>
-    <module>openpdf-fonts-extra</module>
-    <module>openpdf-kotlin</module>
-    <module>openpdf-html</module>
-    <module>openpdf-renderer</module>
+    <module>openpdf-bc-adapter</module>
+    <module>openpdf-fips-adapter</module>
   </modules>
   <!-- Distribution config from http://central.sonatype.org/pages/apache-maven.html#distribution-management-and-authentication -->
   <distributionManagement>

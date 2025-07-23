@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.github.librepdf</groupId>
+        <artifactId>openpdf</artifactId>
+        <version>1.3.30-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>openpdf-fips-adapter</artifactId>
+    <packaging>jar</packaging>
+    <name>OpenPDF FIPS Bouncy Castle Adapter</name>
+    <description>FIPS-compliant Bouncy Castle adapter for OpenPDF cryptography service</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf-core-modern</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bc-fips</artifactId>
+            <version>1.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-fips</artifactId>
+            <version>1.0.7</version>
+        </dependency>
+    </dependencies>
+</project> 

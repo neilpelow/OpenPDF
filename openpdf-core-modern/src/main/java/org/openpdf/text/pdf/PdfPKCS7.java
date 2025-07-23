@@ -119,6 +119,7 @@ import org.bouncycastle.operator.DigestCalculatorProvider;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.TimeStampToken;
 import org.bouncycastle.tsp.TimeStampTokenInfo;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 
 /**
  * This class does all the processing related to signing and verifying a PKCS#7 signature.
@@ -1878,5 +1879,13 @@ public class PdfPKCS7 {
             index = end;
             return buf.toString().trim();
         }
+    }
+
+    // Example: Replace signature creation/verification logic
+    public byte[] signData(byte[] data, PrivateKey privateKey, Certificate[] chain, String digestAlgorithm) throws Exception {
+        return CryptoServiceProvider.get().signPKCS7(data, privateKey, chain, digestAlgorithm);
+    }
+    public boolean verifySignature(byte[] data, byte[] signature, Certificate[] chain, String digestAlgorithm) throws Exception {
+        return CryptoServiceProvider.get().verifyPKCS7(data, signature, chain, digestAlgorithm);
     }
 }

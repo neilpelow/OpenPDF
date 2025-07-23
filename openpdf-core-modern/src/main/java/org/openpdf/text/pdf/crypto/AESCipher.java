@@ -48,64 +48,33 @@
  */
 package org.openpdf.text.pdf.crypto;
 
-import org.bouncycastle.crypto.BlockCipher;
-import org.bouncycastle.crypto.engines.AESEngine;
-import org.bouncycastle.crypto.modes.CBCBlockCipher;
-import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher;
-import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.crypto.params.ParametersWithIV;
-
-/**
- * Creates an AES Cipher with CBC and padding PKCS5/7.
- *
- * @author Paulo Soares (psoares@consiste.pt)
- */
 public class AESCipher {
+    private final boolean forEncryption;
+    private final byte[] key;
+    private final byte[] iv;
+    private byte[] buffer;
+    private int bufferOffset;
 
-    private final PaddedBufferedBlockCipher bp;
-
-    /**
-     * Creates a new instance of AESCipher
-     *
-     * @param forEncryption If it is for encryption
-     * @param iv            An initialization vector
-     * @param key           Bytes for key
-     */
     public AESCipher(boolean forEncryption, byte[] key, byte[] iv) {
-        BlockCipher aes = new AESEngine();
-        BlockCipher cbc = new CBCBlockCipher(aes);
-        bp = new PaddedBufferedBlockCipher(cbc);
-        KeyParameter kp = new KeyParameter(key);
-        ParametersWithIV piv = new ParametersWithIV(kp, iv);
-        bp.init(forEncryption, piv);
+        this.forEncryption = forEncryption;
+        this.key = key;
+        this.iv = iv;
+        this.buffer = new byte[0];
+        this.bufferOffset = 0;
     }
 
     public byte[] update(byte[] inp, int inpOff, int inpLen) {
-        int neededLen = bp.getUpdateOutputSize(inpLen);
-        byte[] outp = null;
-        if (neededLen > 0) {
-            outp = new byte[neededLen];
+        byte[] input = new byte[inpLen];
+        System.arraycopy(inp, inpOff, input, 0, inpLen);
+        if (forEncryption) {
+            return CryptoServiceProvider.get().encryptAES(input, key, iv);
+        } else {
+            return CryptoServiceProvider.get().decryptAES(input, key, iv);
         }
-        bp.processBytes(inp, inpOff, inpLen, outp, 0);
-        return outp;
     }
 
     public byte[] doFinal() {
-        int neededLen = bp.getOutputSize(0);
-        byte[] outp = new byte[neededLen];
-        int n;
-        try {
-            n = bp.doFinal(outp, 0);
-        } catch (Exception ex) {
-            return outp;
-        }
-        if (n != outp.length) {
-            byte[] outp2 = new byte[n];
-            System.arraycopy(outp, 0, outp2, 0, n);
-            return outp2;
-        } else {
-            return outp;
-        }
+        // No-op for this abstraction; all data is processed in update
+        return new byte[0];
     }
-
 }

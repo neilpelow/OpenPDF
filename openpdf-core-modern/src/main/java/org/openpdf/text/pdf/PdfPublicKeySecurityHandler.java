@@ -123,6 +123,7 @@ import org.bouncycastle.asn1.cms.RecipientInfo;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.TBSCertificate;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 
 /**
  * @author Aiken Sam (aikensam@ieee.org)
@@ -201,20 +202,13 @@ public class PdfPublicKeySecurityHandler {
         pkcs7input[22] = two;
         pkcs7input[23] = one;
 
-        ASN1Primitive obj = createDERForRecipient(pkcs7input,
-                (X509Certificate) certificate);
+        // Example: Replace envelope creation logic
+        byte[] envelope = CryptoServiceProvider.get().createEnvelopedData(
+                new ArrayList<>(recipients), pkcs7input);
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        recipient.setCms(envelope);
 
-        final ASN1OutputStream derOutputStream = ASN1OutputStream.create(baos, ASN1Encoding.DER);
-
-        derOutputStream.writeObject(obj);
-
-        cms = baos.toByteArray();
-
-        recipient.setCms(cms);
-
-        return cms;
+        return envelope;
     }
 
     public PdfArray getEncodedRecipients() throws IOException {
@@ -232,58 +226,7 @@ public class PdfPublicKeySecurityHandler {
         return encodedRecipients;
     }
 
-    private ASN1Primitive createDERForRecipient(byte[] in, X509Certificate cert)
-            throws IOException, GeneralSecurityException {
-
-        String s = "1.2.840.113549.3.2";
-
-        AlgorithmParameterGenerator algorithmparametergenerator = AlgorithmParameterGenerator
-                .getInstance(s);
-        AlgorithmParameters algorithmparameters = algorithmparametergenerator
-                .generateParameters();
-        ByteArrayInputStream bytearrayinputstream = new ByteArrayInputStream(
-                algorithmparameters.getEncoded("ASN.1"));
-        ASN1InputStream asn1inputstream = new ASN1InputStream(bytearrayinputstream);
-        ASN1Primitive derobject = asn1inputstream.readObject();
-        KeyGenerator keygenerator = KeyGenerator.getInstance(s);
-        keygenerator.init(128);
-        SecretKey secretkey = keygenerator.generateKey();
-        Cipher cipher = Cipher.getInstance(s);
-        cipher.init(1, secretkey, algorithmparameters);
-        byte[] abyte1 = cipher.doFinal(in);
-        DEROctetString deroctetstring = new DEROctetString(abyte1);
-        KeyTransRecipientInfo keytransrecipientinfo = computeRecipientInfo(cert,
-                secretkey.getEncoded());
-        DERSet derset = new DERSet(new RecipientInfo(keytransrecipientinfo));
-        AlgorithmIdentifier algorithmidentifier = new AlgorithmIdentifier(
-                new ASN1ObjectIdentifier(s), derobject);
-        EncryptedContentInfo encryptedcontentinfo = new EncryptedContentInfo(
-                PKCSObjectIdentifiers.data, algorithmidentifier, deroctetstring);
-        ASN1Set set = null;
-        EnvelopedData env = new EnvelopedData(null, derset, encryptedcontentinfo,
-                set);
-        ContentInfo contentinfo = new ContentInfo(
-                PKCSObjectIdentifiers.envelopedData, env);
-        // OJO... Modificacion de
-        // Felix--------------------------------------------------
-        // return contentinfo.getDERObject();
-        return contentinfo.toASN1Primitive();
-        // ******************************************************************************
-    }
-
-    private KeyTransRecipientInfo computeRecipientInfo(
-            X509Certificate x509certificate, byte[] abyte0)
-            throws GeneralSecurityException, IOException {
-        ASN1InputStream asn1inputstream = new ASN1InputStream(
-                new ByteArrayInputStream(x509certificate.getTBSCertificate()));
-        TBSCertificate tbsCertificate = TBSCertificate.getInstance(asn1inputstream.readObject());
-        AlgorithmIdentifier algorithmidentifier = tbsCertificate.getSubjectPublicKeyInfo().getAlgorithm();
-        IssuerAndSerialNumber issuerandserialnumber = new IssuerAndSerialNumber(
-                tbsCertificate.getIssuer(), tbsCertificate.getSerialNumber().getValue());
-        Cipher cipher = Cipher.getInstance(algorithmidentifier.getAlgorithm().getId());
-        cipher.init(1, x509certificate);
-        DEROctetString deroctetstring = new DEROctetString(cipher.doFinal(abyte0));
-        RecipientIdentifier recipId = new RecipientIdentifier(issuerandserialnumber);
-        return new KeyTransRecipientInfo(recipId, algorithmidentifier, deroctetstring);
+    private byte[] createEnvelope(List<Certificate> recipients, byte[] data) throws Exception {
+        return CryptoServiceProvider.get().createEnvelopedData(recipients, data);
     }
 }
