@@ -19,6 +19,8 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 import org.bouncycastle.cert.ocsp.*;
 import org.bouncycastle.cms.*;
 import org.bouncycastle.cms.jcajce.JceKeyTransEnvelopedRecipient;
+import org.bouncycastle.cms.jcajce.JceKeyTransRecipientInfoGenerator;
+import org.bouncycastle.cms.jcajce.JceCMSContentEncryptorBuilder;
 import org.bouncycastle.operator.DigestCalculatorProvider;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.*;
@@ -34,6 +36,8 @@ import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 
 public class BouncyCastleCryptoService implements ICryptoService {
 
@@ -231,9 +235,31 @@ public class BouncyCastleCryptoService implements ICryptoService {
     @Override
     public byte[] createEnvelopedData(List<Certificate> recipients, byte[] data) throws GeneralSecurityException {
         try {
-            // Simplified envelope creation
-            // In a real implementation, this would create proper CMS enveloped data
-            return data; // Placeholder implementation
+            // Generate a random AES key for content encryption
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES", "BC");
+            keyGen.init(256);
+            SecretKey contentEncryptionKey = keyGen.generateKey();
+            
+            // Create CMS enveloped data generator
+            CMSEnvelopedDataGenerator envelopedDataGen = new CMSEnvelopedDataGenerator();
+            
+            // Add recipients (certificate-based key transport)
+            for (Certificate recipient : recipients) {
+                if (recipient instanceof X509Certificate) {
+                    envelopedDataGen.addRecipientInfoGenerator(
+                        new JceKeyTransRecipientInfoGenerator((X509Certificate) recipient)
+                            .setProvider("BC"));
+                }
+            }
+            
+            // Create the enveloped data
+            CMSEnvelopedData envelopedData = envelopedDataGen.generate(
+                new CMSProcessableByteArray(data),
+                new JceCMSContentEncryptorBuilder(CMSAlgorithm.AES256_CBC)
+                    .setProvider("BC")
+                    .build(contentEncryptionKey));
+            
+            return envelopedData.getEncoded();
         } catch (Exception e) {
             throw new GeneralSecurityException("Envelope creation failed", e);
         }

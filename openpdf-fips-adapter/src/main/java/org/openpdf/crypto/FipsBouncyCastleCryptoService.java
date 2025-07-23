@@ -13,12 +13,13 @@ import java.net.*;
 import java.util.Collection;
 import java.util.ArrayList;
 
-// FIPS Bouncy Castle imports
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 import org.bouncycastle.cert.ocsp.*;
 import org.bouncycastle.cms.*;
 import org.bouncycastle.cms.jcajce.JceKeyTransEnvelopedRecipient;
+import org.bouncycastle.cms.jcajce.JceKeyTransRecipientInfoGenerator;
+import org.bouncycastle.cms.jcajce.JceCMSContentEncryptorBuilder;
 import org.bouncycastle.operator.DigestCalculatorProvider;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.*;
@@ -34,6 +35,8 @@ import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 
 public class FipsBouncyCastleCryptoService implements ICryptoService {
 
@@ -120,7 +123,6 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public byte[] signPKCS7(byte[] data, PrivateKey privateKey, Certificate[] chain, String digestAlgorithm) throws GeneralSecurityException {
         try {
-            // Simplified PKCS#7 signature creation
             MessageDigest md = MessageDigest.getInstance(digestAlgorithm, "BCFIPS");
             byte[] digest = md.digest(data);
             
@@ -167,7 +169,6 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
             OCSPReqBuilder gen = new OCSPReqBuilder();
             gen.addRequest(id);
             
-            // Add nonce extension
             ExtensionsGenerator extGen = new ExtensionsGenerator();
             byte[] nonce = new byte[16];
             new Random().nextBytes(nonce);
@@ -210,8 +211,6 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
             
             TimeStampRequest request = tsqGenerator.generate(digestOid, imprint, nonce);
             byte[] requestBytes = request.getEncoded();
-            
-            // Send request to TSA
             byte[] responseBytes = sendTSARequest(tsaUrl, requestBytes, tsaUsername, tsaPassword);
             
             TimeStampResponse response = new TimeStampResponse(responseBytes);
@@ -231,9 +230,27 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public byte[] createEnvelopedData(List<Certificate> recipients, byte[] data) throws GeneralSecurityException {
         try {
-            // Simplified envelope creation
-            // In a real implementation, this would create proper CMS enveloped data
-            return data; // Placeholder implementation
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES", "BCFIPS");
+            keyGen.init(256);
+            SecretKey contentEncryptionKey = keyGen.generateKey();
+            
+            CMSEnvelopedDataGenerator envelopedDataGen = new CMSEnvelopedDataGenerator();
+            
+            for (Certificate recipient : recipients) {
+                if (recipient instanceof X509Certificate) {
+                    envelopedDataGen.addRecipientInfoGenerator(
+                        new JceKeyTransRecipientInfoGenerator((X509Certificate) recipient)
+                            .setProvider("BCFIPS"));
+                }
+            }
+            
+            CMSEnvelopedData envelopedData = envelopedDataGen.generate(
+                new CMSProcessableByteArray(data),
+                new JceCMSContentEncryptorBuilder(CMSAlgorithm.AES256_CBC)
+                    .setProvider("BCFIPS")
+                    .build(contentEncryptionKey));
+            
+            return envelopedData.getEncoded();
         } catch (Exception e) {
             throw new GeneralSecurityException("Envelope creation failed", e);
         }
