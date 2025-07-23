@@ -1589,9 +1589,14 @@ public class PdfReader implements PdfViewerPreferences, Closeable {
                             MessageLocalization.getComposedMessage(
                                     "unknown.encryption.type.v.eq.1", rValue));
             }
-            BouncyCastleHelper.checkCertificateEncodingOrThrowException(certificate);
-            byte[] envelopedData = CryptoServiceProvider.get().extractEnvelopedData(
-                recipients.getPdfObject(0).getBytes(), (java.security.PrivateKey)certificateKey, certificate);
+            byte[] envelopedData;
+            try {
+                CryptoServiceProvider.get().checkCertificateEncoding(certificate);
+                envelopedData = CryptoServiceProvider.get().extractEnvelopedData(
+                    recipients.getPdfObject(0).getBytes(), (java.security.PrivateKey)certificateKey, certificate);
+            } catch (java.security.GeneralSecurityException e) {
+                throw new ExceptionConverter(e);
+            }
             if (envelopedData == null) {
                 throw new UnsupportedPdfException(
                         MessageLocalization.getComposedMessage("bad.certificate.and.key"));

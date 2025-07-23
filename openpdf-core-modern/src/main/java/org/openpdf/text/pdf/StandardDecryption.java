@@ -49,6 +49,8 @@
 package org.openpdf.text.pdf;
 
 import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
+import org.openpdf.text.pdf.crypto.ARCFOUREncryption;
+import org.openpdf.text.pdf.crypto.AESCipher;
 
 public class StandardDecryption {
 
@@ -86,7 +88,11 @@ public class StandardDecryption {
             if (initiated) {
                 byte[] input = new byte[len];
                 System.arraycopy(b, off, input, 0, len);
-                return CryptoServiceProvider.get().decryptAES(input, key, iv);
+                try {
+                    return CryptoServiceProvider.get().decryptAES(input, key, iv);
+                } catch (Exception e) {
+                    throw new RuntimeException("AES decryption failed", e);
+                }
             } else {
                 int left = Math.min(iv.length - ivptr, len);
                 System.arraycopy(b, off, iv, ivptr, left);
@@ -98,7 +104,11 @@ public class StandardDecryption {
                     if (len > 0) {
                         byte[] input = new byte[len];
                         System.arraycopy(b, off, input, 0, len);
-                        return CryptoServiceProvider.get().decryptAES(input, key, iv);
+                        try {
+                            return CryptoServiceProvider.get().decryptAES(input, key, iv);
+                        } catch (Exception e) {
+                            throw new RuntimeException("AES decryption failed", e);
+                        }
                     }
                 }
                 return null;

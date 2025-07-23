@@ -176,7 +176,13 @@ public class PdfPKCS7 {
         this.privKey = privKey;
         this.provider = provider;
 
-        this.digestAlgorithm = CryptoServiceProvider.get().getDigestOid(hashAlgorithm.toUpperCase());
+        try {
+            this.digestAlgorithm = CryptoServiceProvider.get().getDigestOid(hashAlgorithm.toUpperCase());
+        } catch (Exception e) {
+            throw new NoSuchAlgorithmException(
+                    MessageLocalization.getComposedMessage("unknown.hash.algorithm.1",
+                            hashAlgorithm));
+        }
         if (this.digestAlgorithm == null) {
             throw new NoSuchAlgorithmException(
                     MessageLocalization.getComposedMessage("unknown.hash.algorithm.1",
@@ -215,7 +221,13 @@ public class PdfPKCS7 {
 
         if (hasRSAdata) {
             this.RSAdata = new byte[0];
-            this.messageDigest = MessageDigest.getInstance(CryptoServiceProvider.get().getStandardJavaName(this.digestAlgorithm));
+            try {
+                this.messageDigest = MessageDigest.getInstance(CryptoServiceProvider.get().getStandardJavaName(this.digestAlgorithm));
+            } catch (Exception e) {
+                throw new NoSuchAlgorithmException(
+                        MessageLocalization.getComposedMessage("unknown.hash.algorithm.1",
+                                this.digestAlgorithm));
+            }
         }
 
         if (privKey != null) {
@@ -325,6 +337,13 @@ public class PdfPKCS7 {
         } catch (Exception e) {
             return algName;
         }
+    }
+
+    /**
+     * Gets the subject fields from a certificate
+     */
+    public static X509Name getSubjectFields(X509Certificate certificate) {
+        return new X509Name(certificate.getSubjectDN().toString());
     }
 
     /**

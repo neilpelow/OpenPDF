@@ -6,8 +6,9 @@
 
     <parent>
         <groupId>com.github.librepdf</groupId>
-        <artifactId>openpdf</artifactId>
-        <version>1.3.30-SNAPSHOT</version>
+        <artifactId>openpdf-parent</artifactId>
+        <version>2.4.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>openpdf-bc-adapter</artifactId>
@@ -19,7 +20,7 @@
         <dependency>
             <groupId>com.github.librepdf</groupId>
             <artifactId>openpdf-core-modern</artifactId>
-            <version>${project.version}</version>
+            <version>2.4.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
@@ -30,6 +31,18 @@
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk18on</artifactId>
             <version>1.77</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project> 

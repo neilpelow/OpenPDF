@@ -132,7 +132,9 @@ public class BouncyCastleCryptoService implements ICryptoService {
             MessageDigest md = MessageDigest.getInstance(digestAlgorithm, "BC");
             byte[] digest = md.digest(data);
             
-            java.security.Signature sig = java.security.Signature.getInstance(digestAlgorithm + "withRSA", "BC");
+            // Convert digest algorithm name to proper signature algorithm name
+            String signatureAlgorithm = digestAlgorithm.replace("-", "") + "withRSA";
+            java.security.Signature sig = java.security.Signature.getInstance(signatureAlgorithm, "BC");
             sig.initSign(privateKey);
             sig.update(data);
             return sig.sign();
@@ -144,7 +146,9 @@ public class BouncyCastleCryptoService implements ICryptoService {
     @Override
     public boolean verifyPKCS7(byte[] data, byte[] signature, Certificate[] chain, String digestAlgorithm) throws GeneralSecurityException {
         try {
-            java.security.Signature sig = java.security.Signature.getInstance(digestAlgorithm + "withRSA", "BC");
+            // Convert digest algorithm name to proper signature algorithm name
+            String signatureAlgorithm = digestAlgorithm.replace("-", "") + "withRSA";
+            java.security.Signature sig = java.security.Signature.getInstance(signatureAlgorithm, "BC");
             sig.initVerify(chain[0].getPublicKey());
             sig.update(data);
             return sig.verify(signature);
@@ -261,7 +265,7 @@ public class BouncyCastleCryptoService implements ICryptoService {
                 new CMSProcessableByteArray(data),
                 new JceCMSContentEncryptorBuilder(CMSAlgorithm.AES256_CBC)
                     .setProvider("BC")
-                    .build(contentEncryptionKey));
+                    .build());
             
             return envelopedData.getEncoded();
         } catch (Exception e) {
@@ -276,12 +280,26 @@ public class BouncyCastleCryptoService implements ICryptoService {
             Collection<RecipientInformation> recipientInformations = data.getRecipientInfos().getRecipients();
             
             for (RecipientInformation recipientInfo : recipientInformations) {
+                // Try to match the certificate
                 if (recipientInfo.getRID().match(certificate)) {
                     Recipient rec = new JceKeyTransEnvelopedRecipient(privateKey);
                     return recipientInfo.getContent(rec);
                 }
             }
-            return null;
+            
+            // If no match found, try to decrypt with the private key directly
+            // This handles cases where certificate matching fails but the private key is correct
+            for (RecipientInformation recipientInfo : recipientInformations) {
+                try {
+                    Recipient rec = new JceKeyTransEnvelopedRecipient(privateKey);
+                    return recipientInfo.getContent(rec);
+                } catch (Exception e) {
+                    // Continue to next recipient if this one fails
+                    continue;
+                }
+            }
+            
+            throw new GeneralSecurityException("No matching recipient found for the provided certificate and private key");
         } catch (Exception e) {
             throw new GeneralSecurityException("Envelope extraction failed", e);
         }
@@ -335,11 +353,13 @@ public class BouncyCastleCryptoService implements ICryptoService {
     @Override
     public String verifyCertificate(X509Certificate cert, List<Object> crls, Calendar calendar) throws GeneralSecurityException {
         try {
-            // Simplified certificate verification
+            // Basic certificate validation
             cert.checkValidity(calendar.getTime());
-            return null; // null means valid
+            
+            // Return "VALID" to indicate valid certificate
+            return "VALID";
         } catch (Exception e) {
-            return e.getMessage();
+            return "Certificate validation failed: " + e.getMessage();
         }
     }
 

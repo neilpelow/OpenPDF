@@ -98,6 +98,7 @@ import java.security.AlgorithmParameters;
 import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -116,7 +117,7 @@ public class PdfPublicKeySecurityHandler extends PdfEncryption {
     private final List<byte[]> envelopedData = new ArrayList<>();
 
     public PdfPublicKeySecurityHandler() {
-        super();
+        super(true); // Skip creating another PdfPublicKeySecurityHandler
     }
 
     /**
@@ -181,5 +182,33 @@ public class PdfPublicKeySecurityHandler extends PdfEncryption {
      */
     private byte[] createEnvelope(List<Certificate> recipients, byte[] data) throws Exception {
         return CryptoServiceProvider.get().createEnvelopedData(recipients, data);
+    }
+
+    /**
+     * Get encoded recipients
+     */
+    public PdfArray getEncodedRecipients() throws Exception {
+        PdfArray array = new PdfArray();
+        for (byte[] envelope : envelopedData) {
+            array.add(new PdfString(envelope));
+        }
+        return array;
+    }
+
+    /**
+     * Get seed for encryption
+     */
+    public byte[] getSeed() {
+        // Generate a random seed
+        byte[] seed = new byte[20];
+        new SecureRandom().nextBytes(seed);
+        return seed;
+    }
+
+    /**
+     * Get encoded recipient at index
+     */
+    public byte[] getEncodedRecipient(int index) {
+        return envelopedData.get(index);
     }
 }

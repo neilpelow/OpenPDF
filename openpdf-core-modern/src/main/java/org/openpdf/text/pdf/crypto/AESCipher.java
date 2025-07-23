@@ -66,10 +66,14 @@ public class AESCipher {
     public byte[] update(byte[] inp, int inpOff, int inpLen) {
         byte[] input = new byte[inpLen];
         System.arraycopy(inp, inpOff, input, 0, inpLen);
-        if (forEncryption) {
-            return CryptoServiceProvider.get().encryptAES(input, key, iv);
-        } else {
-            return CryptoServiceProvider.get().decryptAES(input, key, iv);
+        try {
+            if (forEncryption) {
+                return CryptoServiceProvider.get().encryptAES(input, key, iv);
+            } else {
+                return CryptoServiceProvider.get().decryptAES(input, key, iv);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("AES operation failed", e);
         }
     }
 

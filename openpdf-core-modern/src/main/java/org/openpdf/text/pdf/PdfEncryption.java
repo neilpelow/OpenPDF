@@ -156,12 +156,18 @@ public class PdfEncryption {
     private int cryptoMode;
 
     public PdfEncryption() {
+        this(false);
+    }
+
+    protected PdfEncryption(boolean skipPublicKeyHandler) {
         try {
             md5 = MessageDigest.getInstance("MD5");
         } catch (Exception e) {
             throw new ExceptionConverter(e);
         }
-        publicKeyHandler = new PdfPublicKeySecurityHandler();
+        if (!skipPublicKeyHandler) {
+            publicKeyHandler = new PdfPublicKeySecurityHandler();
+        }
     }
 
     public PdfEncryption(PdfEncryption enc) {
@@ -766,8 +772,7 @@ public class PdfEncryption {
 
     public void addRecipient(Certificate cert, int permission) {
         documentID = createDocumentId();
-        publicKeyHandler.addRecipient(new PdfPublicKeyRecipient(cert,
-                permission));
+        publicKeyHandler.addRecipient(cert);
     }
 
     public byte[] computeUserPassword(byte[] ownerPassword) {

@@ -8,6 +8,7 @@ import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Random;
 import java.util.Base64;
+import java.util.Calendar;
 import java.io.*;
 import java.net.*;
 import java.util.Collection;
@@ -28,12 +29,6 @@ import org.bouncycastle.asn1.cms.*;
 import org.bouncycastle.asn1.ocsp.OCSPObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.*;
-import org.bouncycastle.crypto.BlockCipher;
-import org.bouncycastle.crypto.engines.AESEngine;
-import org.bouncycastle.crypto.modes.CBCBlockCipher;
-import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher;
-import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -42,25 +37,25 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
 
     static {
         Security.addProvider(new BouncyCastleFipsProvider());
+        
+        // Initialize FIPS SecureRandom for CMS operations
+        try {
+            SecureRandom secureRandom = SecureRandom.getInstance("DEFAULT", "BCFIPS");
+            org.bouncycastle.crypto.CryptoServicesRegistrar.setSecureRandom(secureRandom);
+        } catch (Exception e) {
+            // Fallback to default SecureRandom if FIPS SecureRandom is not available
+            org.bouncycastle.crypto.CryptoServicesRegistrar.setSecureRandom(new SecureRandom());
+        }
     }
 
     @Override
     public byte[] encryptAES(byte[] data, byte[] key, byte[] iv) throws GeneralSecurityException {
         try {
-            BlockCipher aes = new AESEngine();
-            BlockCipher cbc = new CBCBlockCipher(aes);
-            PaddedBufferedBlockCipher cipher = new PaddedBufferedBlockCipher(cbc);
-            KeyParameter kp = new KeyParameter(key);
-            ParametersWithIV piv = new ParametersWithIV(kp, iv);
-            cipher.init(true, piv);
-            
-            byte[] output = new byte[cipher.getOutputSize(data.length)];
-            int len = cipher.processBytes(data, 0, data.length, output, 0);
-            len += cipher.doFinal(output, len);
-            
-            byte[] result = new byte[len];
-            System.arraycopy(output, 0, result, 0, len);
-            return result;
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding", "BCFIPS");
+            javax.crypto.spec.SecretKeySpec keySpec = new javax.crypto.spec.SecretKeySpec(key, "AES");
+            javax.crypto.spec.IvParameterSpec ivSpec = new javax.crypto.spec.IvParameterSpec(iv);
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, keySpec, ivSpec);
+            return cipher.doFinal(data);
         } catch (Exception e) {
             throw new GeneralSecurityException("AES encryption failed", e);
         }
@@ -69,20 +64,11 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public byte[] decryptAES(byte[] data, byte[] key, byte[] iv) throws GeneralSecurityException {
         try {
-            BlockCipher aes = new AESEngine();
-            BlockCipher cbc = new CBCBlockCipher(aes);
-            PaddedBufferedBlockCipher cipher = new PaddedBufferedBlockCipher(cbc);
-            KeyParameter kp = new KeyParameter(key);
-            ParametersWithIV piv = new ParametersWithIV(kp, iv);
-            cipher.init(false, piv);
-            
-            byte[] output = new byte[cipher.getOutputSize(data.length)];
-            int len = cipher.processBytes(data, 0, data.length, output, 0);
-            len += cipher.doFinal(output, len);
-            
-            byte[] result = new byte[len];
-            System.arraycopy(output, 0, result, 0, len);
-            return result;
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding", "BCFIPS");
+            javax.crypto.spec.SecretKeySpec keySpec = new javax.crypto.spec.SecretKeySpec(key, "AES");
+            javax.crypto.spec.IvParameterSpec ivSpec = new javax.crypto.spec.IvParameterSpec(iv);
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, ivSpec);
+            return cipher.doFinal(data);
         } catch (Exception e) {
             throw new GeneralSecurityException("AES decryption failed", e);
         }
@@ -113,11 +99,27 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public byte[] digest(byte[] data, String algorithm) throws GeneralSecurityException {
         try {
+            // FIPS compliance check - reject non-FIPS approved algorithms
+            if (!isFipsApprovedDigest(algorithm)) {
+                throw new GeneralSecurityException("Algorithm " + algorithm + " is not FIPS approved");
+            }
+            
             MessageDigest md = MessageDigest.getInstance(algorithm, "BCFIPS");
             return md.digest(data);
         } catch (Exception e) {
             throw new GeneralSecurityException("Digest calculation failed", e);
         }
+    }
+    
+    private boolean isFipsApprovedDigest(String algorithm) {
+        // FIPS 140-2 approved digest algorithms
+        return algorithm.equals("SHA-1") || 
+               algorithm.equals("SHA-224") || 
+               algorithm.equals("SHA-256") || 
+               algorithm.equals("SHA-384") || 
+               algorithm.equals("SHA-512") ||
+               algorithm.equals("SHA-512/224") ||
+               algorithm.equals("SHA-512/256");
     }
 
     @Override
@@ -126,7 +128,9 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
             MessageDigest md = MessageDigest.getInstance(digestAlgorithm, "BCFIPS");
             byte[] digest = md.digest(data);
             
-            java.security.Signature sig = java.security.Signature.getInstance(digestAlgorithm + "withRSA", "BCFIPS");
+            // Convert digest algorithm name to proper signature algorithm name
+            String signatureAlgorithm = digestAlgorithm.replace("-", "") + "withRSA";
+            java.security.Signature sig = java.security.Signature.getInstance(signatureAlgorithm, "BCFIPS");
             sig.initSign(privateKey);
             sig.update(data);
             return sig.sign();
@@ -138,7 +142,9 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public boolean verifyPKCS7(byte[] data, byte[] signature, Certificate[] chain, String digestAlgorithm) throws GeneralSecurityException {
         try {
-            java.security.Signature sig = java.security.Signature.getInstance(digestAlgorithm + "withRSA", "BCFIPS");
+            // Convert digest algorithm name to proper signature algorithm name
+            String signatureAlgorithm = digestAlgorithm.replace("-", "") + "withRSA";
+            java.security.Signature sig = java.security.Signature.getInstance(signatureAlgorithm, "BCFIPS");
             sig.initVerify(chain[0].getPublicKey());
             sig.update(data);
             return sig.verify(signature);
@@ -150,7 +156,14 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public void checkCertificateEncoding(Certificate certificate) throws GeneralSecurityException {
         try {
-            new X509CertificateHolder(certificate.getEncoded());
+            // Try to parse the certificate encoding to verify it's valid
+            byte[] encoded = certificate.getEncoded();
+            if (encoded == null || encoded.length == 0) {
+                throw new GeneralSecurityException("Certificate has no encoding");
+            }
+            
+            // Try to create a certificate holder to validate the encoding
+            new X509CertificateHolder(encoded);
         } catch (Exception e) {
             throw new GeneralSecurityException("Certificate encoding check failed", e);
         }
@@ -248,7 +261,7 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
                 new CMSProcessableByteArray(data),
                 new JceCMSContentEncryptorBuilder(CMSAlgorithm.AES256_CBC)
                     .setProvider("BCFIPS")
-                    .build(contentEncryptionKey));
+                    .build());
             
             return envelopedData.getEncoded();
         } catch (Exception e) {
@@ -263,12 +276,26 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
             Collection<RecipientInformation> recipientInformations = data.getRecipientInfos().getRecipients();
             
             for (RecipientInformation recipientInfo : recipientInformations) {
+                // Try to match the certificate
                 if (recipientInfo.getRID().match(certificate)) {
                     Recipient rec = new JceKeyTransEnvelopedRecipient(privateKey);
                     return recipientInfo.getContent(rec);
                 }
             }
-            return null;
+            
+            // If no match found, try to decrypt with the private key directly
+            // This handles cases where certificate matching fails but the private key is correct
+            for (RecipientInformation recipientInfo : recipientInformations) {
+                try {
+                    Recipient rec = new JceKeyTransEnvelopedRecipient(privateKey);
+                    return recipientInfo.getContent(rec);
+                } catch (Exception e) {
+                    // Continue to next recipient if this one fails
+                    continue;
+                }
+            }
+            
+            throw new GeneralSecurityException("No matching recipient found for the provided certificate and private key");
         } catch (Exception e) {
             throw new GeneralSecurityException("Envelope extraction failed", e);
         }
@@ -322,21 +349,35 @@ public class FipsBouncyCastleCryptoService implements ICryptoService {
     @Override
     public String verifyCertificate(X509Certificate cert, List<Object> crls, Calendar calendar) throws GeneralSecurityException {
         try {
-            // Simplified certificate verification
+            // Basic certificate validation
             cert.checkValidity(calendar.getTime());
-            return null; // null means valid
+            
+            // Additional FIPS compliance checks could be added here
+            // Return "VALID" to indicate valid certificate
+            return "VALID";
         } catch (Exception e) {
-            return e.getMessage();
+            return "Certificate validation failed: " + e.getMessage();
         }
     }
 
     @Override
     public Object[] verifyCertificates(Certificate[] certs, KeyStore keystore, List<Object> crls, Calendar calendar) throws GeneralSecurityException {
         try {
-            // Simplified certificate chain verification
+            // Basic certificate chain validation
+            if (certs == null || certs.length == 0) {
+                return new Object[]{false, "No certificates provided"};
+            }
+            
+            // Check each certificate in the chain
+            for (Certificate cert : certs) {
+                if (cert instanceof X509Certificate) {
+                    ((X509Certificate) cert).checkValidity(calendar.getTime());
+                }
+            }
+            
             return new Object[]{true, null}; // {valid, error}
         } catch (Exception e) {
-            return new Object[]{false, e.getMessage()};
+            return new Object[]{false, "Certificate chain validation failed: " + e.getMessage()};
         }
     }
 
