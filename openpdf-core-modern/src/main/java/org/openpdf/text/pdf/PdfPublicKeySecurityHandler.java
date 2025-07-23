@@ -105,127 +105,80 @@ import java.util.List;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import org.bouncycastle.asn1.ASN1Encoding;
-import org.bouncycastle.asn1.ASN1InputStream;
-import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.ASN1OutputStream;
-import org.bouncycastle.asn1.ASN1Primitive;
-import org.bouncycastle.asn1.ASN1Set;
-import org.bouncycastle.asn1.DEROctetString;
-import org.bouncycastle.asn1.DERSet;
-import org.bouncycastle.asn1.cms.ContentInfo;
-import org.bouncycastle.asn1.cms.EncryptedContentInfo;
-import org.bouncycastle.asn1.cms.EnvelopedData;
-import org.bouncycastle.asn1.cms.IssuerAndSerialNumber;
-import org.bouncycastle.asn1.cms.KeyTransRecipientInfo;
-import org.bouncycastle.asn1.cms.RecipientIdentifier;
-import org.bouncycastle.asn1.cms.RecipientInfo;
-import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
-import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
-import org.bouncycastle.asn1.x509.TBSCertificate;
 import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 
 /**
  * @author Aiken Sam (aikensam@ieee.org)
  */
-public class PdfPublicKeySecurityHandler {
+public class PdfPublicKeySecurityHandler extends PdfEncryption {
 
-    static final int SEED_LENGTH = 20;
-
-    private final List<PdfPublicKeyRecipient> recipients;
-
-    private byte[] seed = new byte[SEED_LENGTH];
+    private final List<Certificate> recipients = new ArrayList<>();
+    private final List<byte[]> envelopedData = new ArrayList<>();
 
     public PdfPublicKeySecurityHandler() {
-        KeyGenerator key;
-        try {
-            key = KeyGenerator.getInstance("AES");
-            key.init(192, new SecureRandom());
-            SecretKey sk = key.generateKey();
-            System.arraycopy(sk.getEncoded(), 0, seed, 0, SEED_LENGTH); // create the
-            // 20 bytes
-            // seed
-        } catch (NoSuchAlgorithmException e) {
-            seed = SecureRandom.getSeed(SEED_LENGTH);
-        }
-
-        recipients = new ArrayList<>();
+        super();
     }
 
-    public void addRecipient(PdfPublicKeyRecipient recipient) {
-        recipients.add(recipient);
-    }
-
-    protected byte[] getSeed() {
-        return seed.clone();
-    }
-
-    /*
-     * public PdfPublicKeyRecipient[] getRecipients() { recipients.toArray();
-     * return (PdfPublicKeyRecipient[])recipients.toArray(); }
+    /**
+     * Add a recipient
      */
+    public void addRecipient(Certificate cert) {
+        recipients.add(cert);
+    }
 
+    /**
+     * Get the number of recipients
+     */
     public int getRecipientsSize() {
         return recipients.size();
     }
 
-    public byte[] getEncodedRecipient(int index) throws IOException,
-            GeneralSecurityException {
-        // Certificate certificate = recipient.getX509();
-        PdfPublicKeyRecipient recipient = recipients
-                .get(index);
-        byte[] cms = recipient.getCms();
-
-        if (cms != null) {
-            return cms;
-        }
-
-        Certificate certificate = recipient.getCertificate();
-        int permission = recipient.getPermission();
-
-        permission |= 0xfffff0c0;
-        permission &= 0xfffffffc;
-        permission += 1;
-
-        byte[] pkcs7input = new byte[24];
-
-        byte one = (byte) (permission);
-        byte two = (byte) (permission >> 8);
-        byte three = (byte) (permission >> 16);
-        byte four = (byte) (permission >> 24);
-
-        System.arraycopy(seed, 0, pkcs7input, 0, 20); // put this seed in the pkcs7
-        // input
-
-        pkcs7input[20] = four;
-        pkcs7input[21] = three;
-        pkcs7input[22] = two;
-        pkcs7input[23] = one;
-
-        // Example: Replace envelope creation logic
-        byte[] envelope = CryptoServiceProvider.get().createEnvelopedData(
-                new ArrayList<>(recipients), pkcs7input);
-
-        recipient.setCms(envelope);
-
-        return envelope;
+    /**
+     * Get a recipient
+     */
+    public Certificate getRecipient(int index) {
+        return recipients.get(index);
     }
 
-    public PdfArray getEncodedRecipients() throws IOException {
-        PdfArray encodedRecipients = new PdfArray();
-        byte[] cms;
-        for (int i = 0; i < recipients.size(); i++) {
-            try {
-                cms = getEncodedRecipient(i);
-                encodedRecipients.add(new PdfLiteral(PdfContentByte.escapeString(cms)));
-            } catch (GeneralSecurityException | IOException e) {
-                encodedRecipients = null;
-                break;
-            }
-        }
-        return encodedRecipients;
+    /**
+     * Get the enveloped data
+     */
+    public byte[] getEnvelopedData(int index) {
+        return envelopedData.get(index);
     }
 
+    /**
+     * Prepare the encryption
+     */
+    public void prepareForEncryption() throws GeneralSecurityException {
+        if (recipients.isEmpty()) {
+            throw new GeneralSecurityException("No recipients specified");
+        }
+        
+        // Generate content encryption key
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(128);
+        SecretKey contentKey = keyGen.generateKey();
+        
+        // Create enveloped data for each recipient
+        for (Certificate recipient : recipients) {
+            byte[] envelope = CryptoServiceProvider.get().createEnvelopedData(
+                List.of(recipient), contentKey.getEncoded());
+            envelopedData.add(envelope);
+        }
+    }
+
+    /**
+     * Decrypt the enveloped data
+     */
+    public byte[] decryptEnvelopedData(byte[] envelope, PrivateKey privateKey, Certificate certificate) 
+            throws GeneralSecurityException {
+        return CryptoServiceProvider.get().extractEnvelopedData(envelope, privateKey, certificate);
+    }
+
+    /**
+     * Create envelope for a recipient
+     */
     private byte[] createEnvelope(List<Certificate> recipients, byte[] data) throws Exception {
         return CryptoServiceProvider.get().createEnvelopedData(recipients, data);
     }
