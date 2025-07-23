@@ -64,6 +64,7 @@ import java.util.Arrays;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import com.lowagie.text.pdf.crypto.CryptoServiceProvider;
 
 
 /**
@@ -156,9 +157,72 @@ public class PdfEncryption {
 
     private int cryptoMode;
 
+    /**
+     * Helper method to get MD5 digest using crypto service or fallback to direct MD5
+     */
+    private byte[] getMD5Digest(byte[] data) {
+        try {
+            if (md5 == null) {
+                // Use crypto service
+                return CryptoServiceProvider.getCryptoService().digest(data, "MD5");
+            } else {
+                // Use direct MD5
+                md5.reset();
+                md5.update(data);
+                return md5.digest();
+            }
+        } catch (Exception e) {
+            // Fallback to direct MD5
+            try {
+                md5.reset();
+                md5.update(data);
+                return md5.digest();
+            } catch (Exception ex) {
+                throw new ExceptionConverter(ex);
+            }
+        }
+    }
+
+    /**
+     * Helper method to get MD5 digest using crypto service or fallback to direct MD5
+     */
+    private byte[] getMD5Digest(byte[] data1, byte[] data2) {
+        try {
+            if (md5 == null) {
+                // Use crypto service - concatenate data
+                byte[] combined = new byte[data1.length + data2.length];
+                System.arraycopy(data1, 0, combined, 0, data1.length);
+                System.arraycopy(data2, 0, combined, data1.length, data2.length);
+                return CryptoServiceProvider.getCryptoService().digest(combined, "MD5");
+            } else {
+                // Use direct MD5
+                md5.reset();
+                md5.update(data1);
+                md5.update(data2);
+                return md5.digest();
+            }
+        } catch (Exception e) {
+            // Fallback to direct MD5
+            try {
+                md5.reset();
+                md5.update(data1);
+                md5.update(data2);
+                return md5.digest();
+            } catch (Exception ex) {
+                throw new ExceptionConverter(ex);
+            }
+        }
+    }
+
     public PdfEncryption() {
         try {
-            md5 = MessageDigest.getInstance("MD5");
+            // Try to use the crypto service for MD5, fallback to direct instantiation
+            try {
+                CryptoServiceProvider.getCryptoService().digest(new byte[0], "MD5");
+                md5 = null; // Will use crypto service instead
+            } catch (Exception e) {
+                md5 = MessageDigest.getInstance("MD5");
+            }
         } catch (Exception e) {
             throw new ExceptionConverter(e);
         }
@@ -197,16 +261,25 @@ public class PdfEncryption {
     }
 
     public static byte[] createDocumentId() {
-        MessageDigest md5;
         try {
-            md5 = MessageDigest.getInstance("MD5");
+            // Try to use crypto service first
+            long time = System.currentTimeMillis();
+            long mem = Runtime.getRuntime().freeMemory();
+            String s = time + "+" + mem + "+" + (seq++);
+            return CryptoServiceProvider.getCryptoService().digest(s.getBytes(), "MD5");
         } catch (Exception e) {
-            throw new ExceptionConverter(e);
+            // Fallback to direct MD5
+            MessageDigest md5;
+            try {
+                md5 = MessageDigest.getInstance("MD5");
+            } catch (Exception ex) {
+                throw new ExceptionConverter(ex);
+            }
+            long time = System.currentTimeMillis();
+            long mem = Runtime.getRuntime().freeMemory();
+            String s = time + "+" + mem + "+" + (seq++);
+            return md5.digest(s.getBytes());
         }
-        long time = System.currentTimeMillis();
-        long mem = Runtime.getRuntime().freeMemory();
-        String s = time + "+" + mem + "+" + (seq++);
-        return md5.digest(s.getBytes());
     }
 
     public static PdfObject createInfoId(byte[] id) {

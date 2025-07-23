@@ -83,6 +83,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.bouncycastle.asn1.ASN1Encodable;
+import com.lowagie.text.pdf.crypto.CryptoServiceProvider;
 import org.bouncycastle.asn1.ASN1EncodableVector;
 import org.bouncycastle.asn1.ASN1Encoding;
 import org.bouncycastle.asn1.ASN1Enumerated;
@@ -629,25 +630,31 @@ public class PdfPKCS7 {
      */
     public static String verifyCertificate(X509Certificate cert, Collection crls,
             Calendar calendar) {
-        if (calendar == null) {
-            calendar = new GregorianCalendar();
-        }
-        if (cert.hasUnsupportedCriticalExtension()) {
-            return "Has unsupported critical extension";
-        }
         try {
-            cert.checkValidity(calendar.getTime());
+            return CryptoServiceProvider.getCryptoService().verifyCertificate(cert, 
+                    crls != null ? new ArrayList<>(crls) : new ArrayList<>(), calendar);
         } catch (Exception e) {
-            return e.getMessage();
-        }
-        if (crls != null) {
-            for (Object crl : crls) {
-                if (((CRL) crl).isRevoked(cert)) {
-                    return "Certificate revoked";
+            // Fallback to original implementation if crypto service fails
+            if (calendar == null) {
+                calendar = new GregorianCalendar();
+            }
+            if (cert.hasUnsupportedCriticalExtension()) {
+                return "Has unsupported critical extension";
+            }
+            try {
+                cert.checkValidity(calendar.getTime());
+            } catch (Exception ex) {
+                return ex.getMessage();
+            }
+            if (crls != null) {
+                for (Object crl : crls) {
+                    if (((CRL) crl).isRevoked(cert)) {
+                        return "Certificate revoked";
+                    }
                 }
             }
+            return null;
         }
-        return null;
     }
 
     /**
@@ -663,57 +670,63 @@ public class PdfPKCS7 {
      */
     public static Object[] verifyCertificates(Certificate[] certs,
             KeyStore keystore, Collection crls, Calendar calendar) {
-        if (calendar == null) {
-            calendar = new GregorianCalendar();
-        }
-        for (int k = 0; k < certs.length; ++k) {
-            X509Certificate cert = (X509Certificate) certs[k];
-            String err = verifyCertificate(cert, crls, calendar);
-            if (err != null) {
-                return new Object[]{cert, err};
+        try {
+            return CryptoServiceProvider.getCryptoService().verifyCertificates(certs, keystore,
+                    crls != null ? new ArrayList<>(crls) : new ArrayList<>(), calendar);
+        } catch (Exception e) {
+            // Fallback to original implementation if crypto service fails
+            if (calendar == null) {
+                calendar = new GregorianCalendar();
             }
-            try {
-                for (Enumeration aliases = keystore.aliases(); aliases
-                        .hasMoreElements(); ) {
-                    try {
-                        String alias = (String) aliases.nextElement();
-                        if (!keystore.isCertificateEntry(alias)) {
-                            continue;
-                        }
-                        X509Certificate certStoreX509 = (X509Certificate) keystore
-                                .getCertificate(alias);
-                        if (verifyCertificate(certStoreX509, crls, calendar) != null) {
-                            continue;
-                        }
+            for (int k = 0; k < certs.length; ++k) {
+                X509Certificate cert = (X509Certificate) certs[k];
+                String err = verifyCertificate(cert, crls, calendar);
+                if (err != null) {
+                    return new Object[]{cert, err};
+                }
+                try {
+                    for (Enumeration aliases = keystore.aliases(); aliases
+                            .hasMoreElements(); ) {
                         try {
-                            cert.verify(certStoreX509.getPublicKey());
-                            return null;
+                            String alias = (String) aliases.nextElement();
+                            if (!keystore.isCertificateEntry(alias)) {
+                                continue;
+                            }
+                            X509Certificate certStoreX509 = (X509Certificate) keystore
+                                    .getCertificate(alias);
+                            if (verifyCertificate(certStoreX509, crls, calendar) != null) {
+                                continue;
+                            }
+                            try {
+                                cert.verify(certStoreX509.getPublicKey());
+                                return null;
+                            } catch (Exception ignored) {
+                            }
                         } catch (Exception ignored) {
                         }
+                    }
+                } catch (Exception ignored) {
+                }
+                int j;
+                for (j = 0; j < certs.length; ++j) {
+                    if (j == k) {
+                        continue;
+                    }
+                    X509Certificate certNext = (X509Certificate) certs[j];
+                    try {
+                        cert.verify(certNext.getPublicKey());
+                        break;
                     } catch (Exception ignored) {
                     }
                 }
-            } catch (Exception ignored) {
-            }
-            int j;
-            for (j = 0; j < certs.length; ++j) {
-                if (j == k) {
-                    continue;
-                }
-                X509Certificate certNext = (X509Certificate) certs[j];
-                try {
-                    cert.verify(certNext.getPublicKey());
-                    break;
-                } catch (Exception ignored) {
+                if (j == certs.length) {
+                    return new Object[]{cert,
+                            "Cannot be verified against the KeyStore or the certificate chain"};
                 }
             }
-            if (j == certs.length) {
-                return new Object[]{cert,
-                        "Cannot be verified against the KeyStore or the certificate chain"};
-            }
+            return new Object[]{null,
+                    "Invalid state. Possible circular certificate chain"};
         }
-        return new Object[]{null,
-                "Invalid state. Possible circular certificate chain"};
     }
 
     /**
@@ -829,23 +842,27 @@ public class PdfPKCS7 {
     }
 
     private static String getStandardJavaName(String algName) {
-        if ("SHA1".equals(algName)) {
-            return "SHA-1";
+        try {
+            return CryptoServiceProvider.getCryptoService().getStandardJavaName(algName);
+        } catch (Exception e) {
+            // Fallback to original implementation if crypto service fails
+            if ("SHA1".equals(algName)) {
+                return "SHA-1";
+            }
+            if ("SHA224".equals(algName)) {
+                return "SHA-224";
+            }
+            if ("SHA256".equals(algName)) {
+                return "SHA-256";
+            }
+            if ("SHA384".equals(algName)) {
+                return "SHA-384";
+            }
+            if ("SHA512".equals(algName)) {
+                return "SHA-512";
+            }
+            return algName;
         }
-        if ("SHA224".equals(algName)) {
-            return "SHA-224";
-        }
-        if ("SHA256".equals(algName)) {
-            return "SHA-256";
-        }
-        if ("SHA384".equals(algName)) {
-            return "SHA-384";
-        }
-        if ("SHA512".equals(algName)) {
-            return "SHA-512";
-        }
-        return algName;
-
     }
 
     /**

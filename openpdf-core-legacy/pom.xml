@@ -73,6 +73,20 @@
       <optional>true</optional>
       <scope>test</scope>
     </dependency>
+    
+    <!-- Crypto Service Adapters -->
+    <dependency>
+      <groupId>com.github.librepdf</groupId>
+      <artifactId>openpdf-bc-adapter</artifactId>
+      <version>${project.version}</version>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>com.github.librepdf</groupId>
+      <artifactId>openpdf-fips-adapter</artifactId>
+      <version>${project.version}</version>
+      <optional>true</optional>
+    </dependency>
   </dependencies>
 
   <build>
