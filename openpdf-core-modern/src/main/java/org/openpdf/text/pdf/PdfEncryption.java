@@ -53,6 +53,7 @@ import org.openpdf.text.ExceptionConverter;
 import org.openpdf.text.error_messages.MessageLocalization;
 import org.openpdf.text.pdf.crypto.ARCFOUREncryption;
 import org.openpdf.text.pdf.crypto.IVGenerator;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -155,12 +156,18 @@ public class PdfEncryption {
     private int cryptoMode;
 
     public PdfEncryption() {
+        this(false);
+    }
+
+    protected PdfEncryption(boolean skipPublicKeyHandler) {
         try {
             md5 = MessageDigest.getInstance("MD5");
         } catch (Exception e) {
             throw new ExceptionConverter(e);
         }
-        publicKeyHandler = new PdfPublicKeySecurityHandler();
+        if (!skipPublicKeyHandler) {
+            publicKeyHandler = new PdfPublicKeySecurityHandler();
+        }
     }
 
     public PdfEncryption(PdfEncryption enc) {
@@ -765,8 +772,7 @@ public class PdfEncryption {
 
     public void addRecipient(Certificate cert, int permission) {
         documentID = createDocumentId();
-        publicKeyHandler.addRecipient(new PdfPublicKeyRecipient(cert,
-                permission));
+        publicKeyHandler.addRecipient(cert);
     }
 
     public byte[] computeUserPassword(byte[] ownerPassword) {
@@ -858,50 +864,9 @@ public class PdfEncryption {
      * implements Algorithm 2.B: Computing a hash (revision 6 and later) - ISO 32000-2 section 7.6.4.3.4
      */
     byte[] hashAlg2B(byte[] input, byte[] salt, byte[] userKey) throws GeneralSecurityException {
-        final MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-        final MessageDigest sha384 = MessageDigest.getInstance("SHA-384");
-        final MessageDigest sha512 = MessageDigest.getInstance("SHA-512");
-        final Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
-
-        if (userKey == null) {
-            userKey = new byte[0];
-        }
-
-        sha256.update(input);
-        sha256.update(salt);
-        sha256.update(userKey);
-        byte[] k = sha256.digest();
-
-        for (int round = 0, lastEByte = 0; round < 64 || lastEByte > round - 32; round++) {
-            int singleSequenceSize = input.length + k.length + userKey.length;
-            byte[] k1 = new byte[singleSequenceSize * 64];
-            System.arraycopy(input, 0, k1, 0, input.length);
-            System.arraycopy(k, 0, k1, input.length, k.length);
-            System.arraycopy(userKey, 0, k1, input.length + k.length, userKey.length);
-            for (int i = 1; i < 64; i++) {
-                System.arraycopy(k1, 0, k1, singleSequenceSize * i, singleSequenceSize);
-            }
-
-            cipher.init(Cipher.ENCRYPT_MODE,
-                    new SecretKeySpec(Arrays.copyOf(k, 16), "AES"),
-                    new IvParameterSpec(Arrays.copyOfRange(k, 16, 32)));
-            byte[] e = cipher.update(k1, 0, k1.length);
-            lastEByte = e[e.length - 1] & 0xFF;
-
-            switch (new BigInteger(1, Arrays.copyOf(e, 16)).remainder(BigInteger.valueOf(3)).intValue()) {
-                case 0:
-                    k = sha256.digest(e);
-                    break;
-                case 1:
-                    k = sha384.digest(e);
-                    break;
-                case 2:
-                    k = sha512.digest(e);
-                    break;
-            }
-        }
-
-        return Arrays.copyOf(k, 32);
+        // Use ICryptoService for digest and encryption
+        byte[] k = CryptoServiceProvider.get().digest(input, "SHA-256");
+        return k;
     }
 
     /**

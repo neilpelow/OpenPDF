@@ -1,7 +1,5 @@
 /*
- * $Id: AESCipher.java 3117 2008-01-31 05:53:22Z xlv $
- *
- * Copyright 2006 Paulo Soares
+ * Copyright 2004 by Paulo Soares.
  *
  * The contents of this file are subject to the Mozilla Public License Version 1.1
  * (the "License"); you may not use this file except in compliance with the License.
@@ -46,39 +44,62 @@
  * you aren't using an obsolete version:
  * https://github.com/LibrePDF/OpenPDF
  */
-package org.openpdf.text.pdf.crypto;
+package com.lowagie.text.pdf.crypto;
 
-public class AESCipher {
-    private final boolean forEncryption;
-    private final byte[] key;
-    private final byte[] iv;
-    private byte[] buffer;
-    private int bufferOffset;
+import java.util.ServiceLoader;
 
-    public AESCipher(boolean forEncryption, byte[] key, byte[] iv) {
-        this.forEncryption = forEncryption;
-        this.key = key;
-        this.iv = iv;
-        this.buffer = new byte[0];
-        this.bufferOffset = 0;
-    }
-
-    public byte[] update(byte[] inp, int inpOff, int inpLen) {
-        byte[] input = new byte[inpLen];
-        System.arraycopy(inp, inpOff, input, 0, inpLen);
-        try {
-            if (forEncryption) {
-                return CryptoServiceProvider.get().encryptAES(input, key, iv);
-            } else {
-                return CryptoServiceProvider.get().decryptAES(input, key, iv);
+/**
+ * Provider for cryptographic services in OpenPDF.
+ * This class uses the ServiceLoader mechanism to discover and provide
+ * implementations of the ICryptoService interface.
+ * 
+ * @since 2.4.0
+ */
+public class CryptoServiceProvider {
+    
+    private static volatile ICryptoService cryptoService;
+    private static final Object lock = new Object();
+    
+    /**
+     * Gets the cryptographic service implementation.
+     * Uses lazy initialization and ServiceLoader to discover available implementations.
+     * 
+     * @return the cryptographic service implementation
+     * @throws IllegalStateException if no implementation is available
+     */
+    public static ICryptoService getCryptoService() {
+        if (cryptoService == null) {
+            synchronized (lock) {
+                if (cryptoService == null) {
+                    cryptoService = loadCryptoService();
+                }
             }
-        } catch (Exception e) {
-            throw new RuntimeException("AES operation failed", e);
+        }
+        return cryptoService;
+    }
+    
+    /**
+     * Loads the cryptographic service using ServiceLoader.
+     * 
+     * @return the first available cryptographic service implementation
+     * @throws IllegalStateException if no implementation is available
+     */
+    private static ICryptoService loadCryptoService() {
+        ServiceLoader<ICryptoService> loader = ServiceLoader.load(ICryptoService.class);
+        for (ICryptoService service : loader) {
+            return service;
+        }
+        throw new IllegalStateException("No ICryptoService implementation found. " +
+                "Please ensure that a cryptographic service adapter is available on the classpath.");
+    }
+    
+    /**
+     * Resets the cached cryptographic service instance.
+     * This is useful for testing or when the service needs to be reloaded.
+     */
+    public static void reset() {
+        synchronized (lock) {
+            cryptoService = null;
         }
     }
-
-    public byte[] doFinal() {
-        // No-op for this abstraction; all data is processed in update
-        return new byte[0];
-    }
-}
+} 

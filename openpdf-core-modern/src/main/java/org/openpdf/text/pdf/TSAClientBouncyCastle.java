@@ -60,14 +60,7 @@ import java.net.URLConnection;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Base64;
-import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.cmp.PKIFailureInfo;
-import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
-import org.bouncycastle.tsp.TimeStampRequest;
-import org.bouncycastle.tsp.TimeStampRequestGenerator;
-import org.bouncycastle.tsp.TimeStampResponse;
-import org.bouncycastle.tsp.TimeStampToken;
-import org.bouncycastle.tsp.TimeStampTokenInfo;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 
 /**
  * Time Stamp Authority Client interface implementation using Bouncy Castle org.bouncycastle.tsp package.
@@ -175,75 +168,7 @@ public class TSAClientBouncyCastle implements TSAClient {
     @Override
     public byte[] getTimeStampToken(PdfPKCS7 caller, byte[] imprint)
             throws Exception {
-        return getTimeStampToken(imprint);
-    }
-
-    /**
-     * Get timestamp token - Bouncy Castle request encoding / decoding layer
-     *
-     * @param imprint a byte array containing the imprint
-     * @return the timestamp token
-     * @throws Exception on error
-     */
-    protected byte[] getTimeStampToken(byte[] imprint) throws Exception {
-        byte[] respBytes = null;
-        try {
-            // Setup the time stamp request
-            TimeStampRequestGenerator tsqGenerator = new TimeStampRequestGenerator();
-            tsqGenerator.setCertReq(true);
-            if (isNotEmpty(policy)) {
-                tsqGenerator.setReqPolicy(new ASN1ObjectIdentifier(policy));
-            }
-            BigInteger nonce = BigInteger.valueOf(System.currentTimeMillis());
-            ASN1ObjectIdentifier digestOid = X509ObjectIdentifiers.id_SHA1;
-            if (isNotEmpty(digestName)) {
-                digestOid = new ASN1ObjectIdentifier(PdfPKCS7.getDigestOid(digestName));
-            }
-            TimeStampRequest request = tsqGenerator.generate(digestOid, imprint, nonce);
-            byte[] requestBytes = request.getEncoded();
-
-            // Call the communications layer
-            respBytes = getTSAResponse(requestBytes);
-
-            // Handle the TSA response
-            TimeStampResponse response = new TimeStampResponse(respBytes);
-
-            // validate communication level attributes (RFC 3161 PKIStatus)
-            response.validate(request);
-            PKIFailureInfo failure = response.getFailInfo();
-            int value = (failure == null) ? 0 : failure.intValue();
-            if (value != 0) {
-                // @todo: Translate value of 15 error codes defined by
-                // PKIFailureInfo to string
-                throw new Exception(MessageLocalization.getComposedMessage(
-                        "invalid.tsa.1.response.code.2", tsaURL, String.valueOf(value)));
-            }
-            // @todo: validate the time stap certificate chain (if we want
-            // assure we do not sign using an invalid timestamp).
-
-            // extract just the time stamp token (removes communication status
-            // info)
-            TimeStampToken tsToken = response.getTimeStampToken();
-            if (tsToken == null) {
-                throw new Exception(MessageLocalization.getComposedMessage(
-                        "tsa.1.failed.to.return.time.stamp.token.2", tsaURL,
-                        response.getStatusString()));
-            }
-            TimeStampTokenInfo info = tsToken.getTimeStampInfo(); // to view
-            // details
-            byte[] encoded = tsToken.getEncoded();
-            long stop = System.currentTimeMillis();
-
-            // Update our token size estimate for the next call (padded to be
-            // safe)
-            this.tokSzEstimate = encoded.length + 32;
-            return encoded;
-        } catch (Exception e) {
-            throw e;
-        } catch (Throwable t) {
-            throw new Exception(MessageLocalization.getComposedMessage(
-                    "failed.to.get.tsa.response.from.1", tsaURL), t);
-        }
+        return CryptoServiceProvider.get().getTimeStampToken(imprint, tsaURL, tsaUsername, tsaPassword);
     }
 
     /**

@@ -52,6 +52,7 @@ import org.openpdf.text.ExceptionConverter;
 import org.openpdf.text.pdf.crypto.AESCipher;
 import org.openpdf.text.pdf.crypto.ARCFOUREncryption;
 import org.openpdf.text.pdf.crypto.IVGenerator;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -83,6 +84,7 @@ public class OutputStreamEncryption extends OutputStream {
                 byte[] iv = IVGenerator.getIV();
                 byte[] nkey = new byte[len];
                 System.arraycopy(key, off, nkey, 0, len);
+                // Use CryptoServiceProvider for AES encryption
                 cipher = new AESCipher(true, nkey, iv);
                 write(iv);
             } else {

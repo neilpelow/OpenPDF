@@ -49,7 +49,6 @@
 
 package org.openpdf.text.pdf;
 
-import org.openpdf.bouncycastle.BouncyCastleHelper;
 import org.openpdf.text.ExceptionConverter;
 import org.openpdf.text.PageSize;
 import org.openpdf.text.Rectangle;
@@ -79,6 +78,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.zip.InflaterInputStream;
+import org.openpdf.text.pdf.crypto.CryptoServiceProvider;
 
 /**
  * Reads a PDF document.
@@ -1589,17 +1589,19 @@ public class PdfReader implements PdfViewerPreferences, Closeable {
                             MessageLocalization.getComposedMessage(
                                     "unknown.encryption.type.v.eq.1", rValue));
             }
-            BouncyCastleHelper.checkCertificateEncodingOrThrowException(certificate);
-            byte[] envelopedData = BouncyCastleHelper.getEnvelopedData(recipients, strings, certificate, certificateKey,
-                    certificateKeyProvider);
-
+            byte[] envelopedData;
+            try {
+                CryptoServiceProvider.get().checkCertificateEncoding(certificate);
+                envelopedData = CryptoServiceProvider.get().extractEnvelopedData(
+                    recipients.getPdfObject(0).getBytes(), (java.security.PrivateKey)certificateKey, certificate);
+            } catch (java.security.GeneralSecurityException e) {
+                throw new ExceptionConverter(e);
+            }
             if (envelopedData == null) {
                 throw new UnsupportedPdfException(
                         MessageLocalization.getComposedMessage("bad.certificate.and.key"));
             }
-
             MessageDigest md;
-
             try {
                 md = MessageDigest.getInstance("SHA-1");
                 md.update(envelopedData, 0, 20);
